@@ -1,0 +1,1072 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Neon Goals — No top-bar lift + Export/Import</title>
+
+  <!-- Pre-apply theme to avoid flash -->
+  <script>
+    (function(){
+      try {
+        const raw = localStorage.getItem('neon_goals_v2');
+        if(raw){
+          const parsed = JSON.parse(raw);
+          if(parsed && parsed.theme === 'light') document.documentElement.classList.add('light');
+        } else {
+          const t = localStorage.getItem('neon_goals_theme');
+          if(t === 'light') document.documentElement.classList.add('light');
+        }
+      } catch(e){}
+    })();
+  </script>
+
+  <!-- Font Awesome -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+
+  <meta name="theme-color" content="#0f1724">
+
+  <style>
+    /*
+      Clean theme variables. Body uses a single variable for bg (no weird gradient).
+      Panels/cards use --panel so they contrast properly.
+    */
+    :root{
+      --bg: #071023;           /* page background */
+      --panel: #091827;        /* card / panel background */
+      --text: #e6f0ff;
+      --muted: #9aa5b1;
+      --accent: #00f0ff;
+      --accent-2: #7b61ff;
+      --glass: rgba(255,255,255,0.03);
+      --glass-border: rgba(255,255,255,0.04);
+      --card-radius: 14px;
+      --neon: 0 0 14px rgba(0,240,255,0.14), 0 0 40px rgba(123,97,255,0.06);
+      --btn-text: var(--text);
+      --input-bg: transparent;
+      --border-weak: rgba(255,255,255,0.03);
+    }
+
+    /* Light overrides */
+    html.light{
+      --bg:#f6f9fc;
+      --panel:#ffffff;
+      --text:#0b1320;
+      --muted:#55606a;
+      --accent:#007f9a;
+      --accent-2:#7b61ff;
+      --glass: rgba(2,6,23,0.03);
+      --glass-border: rgba(2,6,23,0.06);
+      --neon: 0 0 8px rgba(123,97,255,0.06);
+      --btn-text: var(--text);
+      --input-bg: #f6f8fb;
+      --border-weak: rgba(2,6,23,0.04);
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      background: var(--bg);
+      color:var(--text);
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+      padding:18px;
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      transition: background .18s ease, color .18s ease;
+    }
+
+    .app{
+      max-width:1200px;
+      margin:0 auto;
+      display:grid;
+      grid-template-columns: 260px 1fr;
+      gap:18px;
+      align-items:start;
+    }
+
+    header.app-header{
+      grid-column: 1 / -1;
+      display:flex;
+      gap:14px;
+      align-items:center;
+      justify-content:space-between;
+      margin-bottom:6px;
+    }
+
+    .brand{
+      display:flex;
+      gap:12px;
+      align-items:center;
+    }
+    .logo{
+      width:48px; height:48px;
+      background:linear-gradient(135deg,var(--accent),var(--accent-2));
+      border-radius:10px;
+      display:flex;
+      align-items:center; justify-content:center;
+      box-shadow:var(--neon);
+      font-weight:700;
+    }
+    .brand h1{margin:0;font-size:18px;letter-spacing:0.6px}
+    .brand p{margin:0;font-size:12px;color:var(--muted)}
+
+    .top-actions{
+      display:flex; gap:8px; align-items:center;
+    }
+
+    .btn{
+      background:var(--glass);
+      border:1px solid var(--glass-border);
+      padding:8px 12px;
+      border-radius:10px;
+      color:var(--btn-text);
+      cursor:pointer;
+      display:inline-flex;
+      gap:8px;
+      align-items:center;
+      transition: box-shadow .12s ease, background .12s ease, color .12s ease;
+      font-size:14px;
+    }
+    /* removed translateY hover so top-bar buttons don't lift */
+    .btn:hover{ box-shadow: 0 6px 18px rgba(0,0,0,0.08); }
+    .btn:active{ transform: none; box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+
+    /* specifically stop any lift for buttons inside the top-actions (ensures no jump) */
+    .top-actions .btn:hover,
+    .top-actions .btn:active {
+      transform: none !important;
+      /* keep a subtle visual hover but no movement */
+      filter: brightness(1.02);
+      box-shadow: none;
+    }
+
+    .btn.primary{
+      background:linear-gradient(90deg,var(--accent),var(--accent-2));
+      color:#fff;
+      font-weight:700;
+      box-shadow:var(--neon);
+      border:0;
+    }
+
+    .controls {display:flex; gap:8px; align-items:center}
+
+    /* Sidebar */
+    .sidebar{
+      background: var(--panel);
+      padding:14px;
+      border-radius:var(--card-radius);
+      border:1px solid var(--border-weak);
+      min-height:360px;
+      position:relative;
+      overflow:auto;
+    }
+
+    .folders{ display:flex; flex-direction:column; gap:8px; margin-top:6px; }
+    .folder{
+      display:flex; align-items:center; gap:10px;
+      padding:8px; border-radius:10px; cursor:pointer;
+      transition:background .12s ease, transform .12s ease; border:1px solid transparent;
+      color:var(--text);
+      background: transparent;
+    }
+    .folder:hover{transform:translateY(-3px)}
+    .folder.active{
+      background:linear-gradient(90deg, rgba(0,240,255,0.04), rgba(123,97,255,0.02));
+      border:1px solid var(--border-weak);
+      box-shadow:var(--neon);
+    }
+    .folder .dot{width:12px;height:12px;border-radius:50%}
+    .folder .meta{font-size:12px;color:var(--muted)}
+
+    .quick-stats{ margin-top:16px; display:flex; gap:8px; flex-wrap:wrap; }
+    .stat{ background:var(--glass); padding:8px 10px; border-radius:10px; font-size:13px; border:1px solid var(--glass-border); color:var(--text); }
+
+    /* Main */
+    .main{ min-height:360px; padding:14px; border-radius:var(--card-radius); border:1px solid var(--border-weak); background:var(--panel); }
+
+    .main-top{ display:flex; justify-content:space-between; align-items:center; gap:12px; }
+
+    .search{ display:flex; gap:10px; align-items:center; background:var(--glass); padding:8px 10px; border-radius:10px; border:1px solid var(--glass-border); }
+    .search input{ background:var(--input-bg); border:0; color:var(--text); outline:none; width:240px; padding:6px; border-radius:6px; }
+
+    .goals{ margin-top:14px; display:grid; grid-template-columns: repeat(auto-fill,minmax(260px,1fr)); gap:12px; }
+
+    .goal-card{
+      padding:12px; border-radius:12px; border:1px solid var(--border-weak);
+      transition:transform .12s ease, box-shadow .12s ease; position:relative; overflow:hidden; min-height:92px;
+      display:flex; flex-direction:column; gap:8px; color:var(--text); background:var(--panel);
+    }
+    .goal-card:hover{transform:translateY(-6px); box-shadow:0 10px 30px rgba(0,0,0,0.08)}
+    .goal-card.compact{padding:8px; min-height:56px}
+    .goal-title{font-weight:700}
+    .goal-row{display:flex; justify-content:space-between; align-items:center; gap:8px}
+    .progress{ height:8px; background:rgba(0,0,0,0.04); border-radius:6px; overflow:hidden; }
+    .progress > i{ display:block; height:100%; background:linear-gradient(90deg,var(--accent),var(--accent-2)); width:0% }
+
+    .muted{ color:var(--muted); font-size:13px }
+
+    .subtasks{ display:flex; flex-direction:column; gap:6px; margin-top:6px }
+    .subtask-item{ display:flex; gap:8px; align-items:center; font-size:13px }
+    .subtask-item input[type="checkbox"]{ width:18px; height:18px }
+
+    .tips{ margin-top:12px; color:var(--muted); font-size:13px }
+
+    /* modals */
+    .modal{
+      position:fixed; left:50%; top:50%; transform:translate(-50%,-50%) scale(0.98);
+      background:var(--panel); padding:18px; border-radius:16px; width:92%; max-width:720px;
+      box-shadow:0 24px 60px rgba(2,6,23,0.08); border:1px solid var(--glass-border); z-index:60; display:none;
+    }
+    .modal.show{ display:block; animation:pop .15s ease forwards }
+    @keyframes pop{ from{opacity:0; transform:translate(-50%,-50%) scale(.98)} to{opacity:1; transform:translate(-50%,-50%) scale(1)} }
+    .modal input, .modal textarea, .modal select{ width:100%; padding:10px; border-radius:10px; border:1px solid var(--glass-border); background:var(--input-bg); color:var(--text); outline:none; }
+
+    .compact .goals{ grid-template-columns: repeat(auto-fill,minmax(160px,1fr)) }
+    .compact .goal-card{ min-height:64px; padding:8px }
+    .compact .search input{ width:160px }
+
+    @media (max-width:880px){
+      .app{ grid-template-columns: 1fr }
+      .sidebar{ order:2 }
+      .main{ order:1 }
+    }
+
+    .badge{ background:var(--glass); padding:6px 8px; border-radius:10px; font-size:12px; color:var(--muted); border:1px solid var(--glass-border); }
+
+    .neonGlow{ text-shadow: 0 0 6px rgba(0,240,255,0.12); }
+    .empty{ text-align:center; padding:28px; color:var(--muted); border-radius:10px; background:transparent }
+    .dragging{ opacity:.5; transform:scale(.98) }
+
+    /* Pomodoro */
+    .pomodoro{ display:flex; gap:8px; align-items:center; background:var(--glass); padding:8px 10px; border-radius:10px; border:1px solid var(--glass-border); }
+    .pomodoro .btn{ padding:8px 12px; border-radius:10px; font-size:14px; display:inline-flex; gap:8px; align-items:center; border:1px solid var(--glass-border); background:var(--glass); color:var(--btn-text); }
+    .pomodoro .btn.primary{ background:linear-gradient(90deg,var(--accent),var(--accent-2)); color:#fff; box-shadow:var(--neon); border:0; }
+    .pom-display{ font-weight:700; font-size:16px; min-width:84px; text-align:center }
+    #pomDuration, #pomGoalSelect { padding:8px 10px; border-radius:8px; border:1px solid var(--glass-border); background:var(--input-bg); color:var(--text); outline:none }
+
+    /* Idea modal specifics */
+    .idea-suggestion{ font-weight:700; font-size:16px; margin-bottom:8px; }
+    .idea-subtasks{ margin-top:6px; color:var(--muted) }
+
+    /* Hidden file input style */
+    input[type="file"].hidden { display:none; }
+  </style>
+</head>
+<body>
+  <div class="app" id="app">
+    <header class="app-header">
+      <div class="brand">
+        <div class="logo"><i class="fa-solid fa-bolt" style="color:var(--btn-text)"></i></div>
+        <div>
+          <h1 class="neonGlow">Neon Goals</h1>
+          <p>Folders • Goals • Subtasks • Pomodoro</p>
+        </div>
+      </div>
+
+      <div class="top-actions">
+        <div class="controls">
+          <button class="btn" id="themeToggle" title="Toggle light/dark"><i class="fa-regular fa-circle-half-stroke"></i> Theme</button>
+          <button class="btn" id="compactToggle" title="Compact mode"><i class="fa-solid fa-compress"></i> Compact</button>
+          <div class="btn" id="addFolderBtn" title="Add folder"><i class="fa-solid fa-folder-plus"></i> Folder</div>
+          <button class="btn primary" id="quickGoalBtn"><i class="fa-solid fa-plus"></i> Quick Goal</button>
+          <button class="btn" id="ideaBtn" title="Get a random goal idea"><i class="fa-solid fa-dice"></i> Idea</button>
+
+          <!-- EXPORT / IMPORT buttons -->
+          <button class="btn" id="exportBtn" title="Export backup"><i class="fa-solid fa-download"></i> Export</button>
+          <button class="btn" id="importBtn" title="Import backup"><i class="fa-solid fa-upload"></i> Import</button>
+          <input id="importFile" class="hidden" type="file" accept="application/json" />
+        </div>
+
+        <div class="pomodoro" id="pomodoroWidget" title="Pomodoro: attach to a goal">
+          <div style="display:flex; align-items:center; gap:8px">
+            <i class="fa-solid fa-stopwatch"></i>
+            <div style="display:flex; flex-direction:column;">
+              <div style="display:flex; gap:8px; align-items:center">
+                <div class="pom-display" id="pomTime">25:00</div>
+                <div style="display:flex; gap:6px">
+                  <button class="btn primary" id="pomStart" title="Start"><i class="fa-solid fa-play"></i></button>
+                  <button class="btn" id="pomPause" title="Pause"><i class="fa-solid fa-pause"></i></button>
+                  <button class="btn" id="pomReset" title="Reset"><i class="fa-solid fa-rotate-left"></i></button>
+                </div>
+              </div>
+
+              <div style="display:flex; gap:8px; align-items:center; margin-top:6px;">
+                <select id="pomDuration" class="small" title="Duration">
+                  <option value="1500">25 min</option>
+                  <option value="300">5 min (short)</option>
+                  <option value="600">10 min</option>
+                  <option value="900">15 min</option>
+                  <option value="1200">20 min</option>
+                  <option value="2700">45 min</option>
+                  <option value="3600">60 min</option>
+                  <option value="5400">90 min</option>
+                  <option value="3000">50 / 10 (set 50)</option>
+                </select>
+
+                <select id="pomGoalSelect" class="small" title="Attach to goal"></select>
+                <div class="badge subtle" id="pomStatus">Idle</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </header>
+
+    <aside class="sidebar">
+      <div style="display:flex; justify-content:space-between; align-items:center">
+        <h3 style="margin:0">Folders</h3>
+        <div class="badge" id="foldersCount">0</div>
+      </div>
+
+      <div class="folders" id="foldersList"></div>
+
+      <div class="quick-stats">
+        <div class="stat" id="totalGoals">Goals: 0</div>
+        <div class="stat" id="completedGoals">Done: 0</div>
+        <div class="stat" id="recurringCount">Recurring: 0</div>
+      </div>
+
+      <div class="tips">
+        <p><strong>Tips:</strong> Use subtasks to break goals; set recurrence to auto-create next tasks; attach Pomodoro to focus.</p>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="main-top">
+        <div style="display:flex; gap:8px; align-items:center">
+          <div class="search">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input id="searchInput" placeholder="Search goals, subtasks, folders..." />
+          </div>
+          <select id="filterSelect" class="btn" title="Filter results" style="padding:8px 10px; border-radius:10px;">
+            <option value="all">All</option>
+            <option value="incomplete">Incomplete</option>
+            <option value="completed">Completed</option>
+            <option value="dueToday">Due Today</option>
+            <option value="overdue">Overdue</option>
+            <option value="recurring">Recurring</option>
+            <option value="noRecurrence">No Recurrence</option>
+          </select>
+        </div>
+
+        <div style="display:flex; gap:8px; align-items:center">
+          <div class="badge" id="selectedFolderName">All</div>
+          <div class="badge" id="folderProgress">0%</div>
+        </div>
+      </div>
+
+      <div class="goals" id="goalsGrid"></div>
+
+      <div id="emptyState" class="empty" style="display:none">
+        <h3>No goals yet</h3>
+        <p>Create a folder, add a goal, and add subtasks. Use Pomodoro when you're ready.</p>
+      </div>
+    </main>
+  </div>
+
+  <!-- Folder Modal -->
+  <div class="modal" id="folderModal" role="dialog" aria-hidden="true">
+    <h3 id="folderModalTitle">New Folder</h3>
+    <div class="row" style="margin-top:8px">
+      <input id="folderName" placeholder="Folder name (e.g. Fitness, Study)" />
+      <input id="folderColor" type="color" value="#00f0ff" style="width:64px;height:40px;padding:6px;border-radius:8px" />
+    </div>
+    <div style="display:flex; gap:8px; margin-top:12px; justify-content:flex-end">
+      <button class="btn" id="cancelFolder">Cancel</button>
+      <button class="btn primary" id="saveFolder">Save</button>
+    </div>
+  </div>
+
+  <!-- Goal Modal -->
+  <div class="modal" id="goalModal" role="dialog" aria-hidden="true">
+    <h3 id="goalModalTitle">New Goal</h3>
+
+    <div style="display:grid; gap:8px; margin-top:8px">
+      <input id="goalTitle" placeholder="Goal title (e.g. Run 5km)" />
+      <textarea id="goalNotes" placeholder="Notes, steps, micro-tasks..." rows="3"></textarea>
+
+      <div style="display:flex; gap:8px; align-items:center">
+        <input id="goalDue" type="date" />
+        <select id="goalRecurrence">
+          <option value="none">No recurrence</option>
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+        <select id="goalFolderSelect"></select>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px">
+        <div style="font-weight:700">Subtasks</div>
+        <div class="muted small">Check to mark complete</div>
+      </div>
+
+      <div id="subtasksList" style="display:flex; flex-direction:column; gap:8px"></div>
+
+      <div style="display:flex; gap:8px">
+        <input id="newSubtaskInput" placeholder="New subtask..." />
+        <button class="btn" id="addSubtaskBtn"><i class="fa-solid fa-plus"></i></button>
+      </div>
+
+    </div>
+
+    <div style="display:flex; gap:8px; margin-top:12px; justify-content:flex-end">
+      <button class="btn" id="cancelGoal">Cancel</button>
+      <button class="btn primary" id="saveGoal">Save Goal</button>
+    </div>
+  </div>
+
+  <!-- Idea Modal -->
+  <div class="modal" id="ideaModal" role="dialog" aria-hidden="true">
+    <h3>Random Goal Idea</h3>
+    <div style="margin-top:8px">
+      <div class="idea-suggestion" id="ideaTitle">—</div>
+      <div id="ideaNotes" class="muted"></div>
+      <div class="idea-subtasks" id="ideaSubtasks"></div>
+    </div>
+    <div style="display:flex; gap:8px; margin-top:12px; justify-content:flex-end">
+      <button class="btn" id="ideaClose">Close</button>
+      <button class="btn" id="ideaOpen" title="Open in editor"><i class="fa-solid fa-pen"></i> Edit</button>
+      <button class="btn primary" id="ideaCreate" title="Add directly to folder"><i class="fa-solid fa-check"></i> Add</button>
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      const LS_KEY = 'neon_goals_v2';
+      const $ = s => document.querySelector(s);
+
+      // DOM refs
+      const foldersListEl = $('#foldersList');
+      const goalsGridEl = $('#goalsGrid');
+      const foldersCountEl = $('#foldersCount');
+      const totalGoalsEl = $('#totalGoals');
+      const completedGoalsEl = $('#completedGoals');
+      const selectedFolderNameEl = $('#selectedFolderName');
+      const folderProgressEl = $('#folderProgress');
+      const recurringCountEl = $('#recurringCount');
+      const emptyStateEl = $('#emptyState');
+
+      // Pomodoro
+      const pomTimeEl = $('#pomTime');
+      const pomStartBtn = $('#pomStart');
+      const pomPauseBtn = $('#pomPause');
+      const pomResetBtn = $('#pomReset');
+      const pomDurationSel = $('#pomDuration');
+      const pomGoalSelect = $('#pomGoalSelect');
+      const pomStatus = $('#pomStatus');
+
+      // modals & inputs
+      const folderModal = $('#folderModal');
+      const folderNameInput = $('#folderName');
+      const folderColorInput = $('#folderColor');
+
+      const goalModal = $('#goalModal');
+      const goalTitle = $('#goalTitle');
+      const goalNotes = $('#goalNotes');
+      const goalDue = $('#goalDue');
+      const goalRecurrence = $('#goalRecurrence');
+      const goalFolderSelect = $('#goalFolderSelect');
+      const subtasksList = $('#subtasksList');
+      const newSubtaskInput = $('#newSubtaskInput');
+      const addSubtaskBtn = $('#addSubtaskBtn');
+
+      const ideaModal = $('#ideaModal');
+      const ideaTitleEl = $('#ideaTitle');
+      const ideaNotesEl = $('#ideaNotes');
+      const ideaSubtasksEl = $('#ideaSubtasks');
+      const ideaCloseBtn = $('#ideaClose');
+      const ideaOpenBtn = $('#ideaOpen');
+      const ideaCreateBtn = $('#ideaCreate');
+
+      const searchInput = $('#searchInput');
+      const filterSelect = $('#filterSelect');
+
+      // Export / Import UI
+      const exportBtn = $('#exportBtn');
+      const importBtn = $('#importBtn');
+      const importFile = $('#importFile');
+
+      // State
+      const STATE = {
+        folders: [],
+        selectedFolderId: null,
+        compact: false,
+        theme: (document.documentElement.classList.contains('light') ? 'light' : 'dark'),
+        pom: { running:false, remaining:1500, intervalId:null, attachedGoalId:null, duration:1500 },
+      };
+
+      // --- load / save ---
+      function load(){
+        const raw = localStorage.getItem(LS_KEY) || localStorage.getItem('neon_goals_v1');
+        if(raw){
+          try{
+            const parsed = JSON.parse(raw);
+            if(parsed){
+              if(Array.isArray(parsed.folders)) STATE.folders = parsed.folders;
+              if(parsed.selectedFolderId) STATE.selectedFolderId = parsed.selectedFolderId;
+              if(typeof parsed.compact === 'boolean') STATE.compact = parsed.compact;
+              if(parsed.theme) STATE.theme = parsed.theme;
+              if(parsed.pom) STATE.pom = Object.assign(STATE.pom, parsed.pom);
+            }
+            STATE.folders = STATE.folders || [];
+            STATE.folders.forEach(f => {
+              f.goals = f.goals || [];
+              f.goals.forEach(g => {
+                g.subtasks = g.subtasks || [];
+                g.recurrence = g.recurrence || 'none';
+                g.pomodoros = g.pomodoros || 0;
+                g.createdAt = g.createdAt || Date.now();
+                g.due = g.due || null;
+                g.completed = !!g.completed;
+              });
+            });
+          }catch(e){ console.error('load error', e); }
+        } else {
+          // seed
+          const f = { id:id(), name:'Personal', color:'#00f0ff', goals:[
+            { id:id(), title:'Read 20 pages', notes:'Even 10 is okay', due:null, completed:false, createdAt:Date.now(), subtasks:[{id:id(),text:'Open book',checked:false}], recurrence:'none', pomodoros:0 },
+            { id:id(), title:'Run 3km', notes:'Easy pace', due:null, completed:false, createdAt:Date.now(), subtasks:[], recurrence:'none', pomodoros:0 },
+          ]};
+          STATE.folders.push(f);
+          STATE.selectedFolderId = f.id;
+          save();
+        }
+      }
+
+      function save(){
+        const toSave = JSON.parse(JSON.stringify(STATE));
+        if(toSave.pom){ delete toSave.pom.intervalId; delete toSave.pom.running; }
+        localStorage.setItem(LS_KEY, JSON.stringify(toSave));
+        localStorage.setItem('neon_goals_theme', STATE.theme);
+        renderAll();
+      }
+
+      function id(){ return 'n'+Math.random().toString(36).slice(2,9) }
+
+      // --- Theme ---
+      function applyThemeFromState(){ if(STATE.theme === 'light') document.documentElement.classList.add('light'); else document.documentElement.classList.remove('light'); }
+
+      // --- Render ---
+      function renderAll(){
+        renderFolders();
+        renderGoals();
+        renderStats();
+        renderGoalSelectForPomodoro();
+        updatePomButtonStyles();
+        applyThemeFromState();
+      }
+
+      function renderFolders(){
+        foldersListEl.innerHTML = '';
+        STATE.folders.forEach(folder => {
+          const el = document.createElement('div');
+          el.className = 'folder' + (STATE.selectedFolderId===folder.id ? ' active' : '');
+          el.dataset.id = folder.id;
+          el.innerHTML = `
+            <div class="dot" style="background:${folder.color}"></div>
+            <div style="flex:1">
+              <div style="display:flex; justify-content:space-between; align-items:center">
+                <div style="font-weight:700">${escapeHtml(folder.name)}</div>
+                <div style="font-size:12px;color:var(--muted)">${folder.goals.length}</div>
+              </div>
+              <div class="meta">${computeFolderProgress(folder)}% • ${getFolderCompleted(folder)} done</div>
+            </div>
+            <div style="display:flex; gap:8px; margin-left:8px">
+              <button class="btn" data-action="edit-folder" title="Edit folder"><i class="fa-solid fa-pen-to-square"></i></button>
+              <button class="btn" data-action="delete-folder" title="Delete folder"><i class="fa-solid fa-trash"></i></button>
+            </div>
+          `;
+          el.addEventListener('click', (e)=>{
+            if(e.target.closest('[data-action]')) return;
+            STATE.selectedFolderId = folder.id; save();
+          });
+          el.querySelector('[data-action="edit-folder"]')?.addEventListener('click',(ev)=>{ ev.stopPropagation(); openFolderModal(folder); });
+          el.querySelector('[data-action="delete-folder"]')?.addEventListener('click',(ev)=>{ ev.stopPropagation(); if(confirm(`Delete folder "${folder.name}" and all its goals?`)){ const idx = STATE.folders.findIndex(f=>f.id===folder.id); if(idx>=0) STATE.folders.splice(idx,1); if(STATE.selectedFolderId===folder.id) STATE.selectedFolderId = STATE.folders[0]?.id || null; ensureAtLeastOneFolder(); save(); } });
+          foldersListEl.appendChild(el);
+        });
+        foldersCountEl.textContent = STATE.folders.length;
+      }
+
+      function computeFolderProgress(folder){
+        if(!folder || !folder.goals.length) return 0;
+        const done = folder.goals.filter(g=>g.completed).length;
+        return Math.round(done / folder.goals.length * 100);
+      }
+      function getFolderCompleted(folder){ return folder.goals.filter(g=>g.completed).length }
+
+      function renderGoals(){
+        const selected = STATE.folders.find(f=>f.id===STATE.selectedFolderId);
+        const q = (searchInput.value || '').trim().toLowerCase();
+        const filter = (filterSelect.value || 'all');
+
+        let goals = [];
+        if(selected){
+          goals = selected.goals.map(g=>({...g, folderId:selected.id, folderName:selected.name, folderColor:selected.color}));
+        } else {
+          STATE.folders.forEach(f=> f.goals.forEach(g => goals.push({...g, folderId:f.id, folderName:f.name, folderColor:f.color})));
+        }
+
+        // search
+        if(q){
+          goals = goals.filter(g => (g.title||'').toLowerCase().includes(q) || (g.notes||'').toLowerCase().includes(q) || g.subtasks.some(s=>s.text.toLowerCase().includes(q)) || (g.folderName||'').toLowerCase().includes(q));
+        }
+
+        // filter
+        const todayIso = (new Date()).toISOString().slice(0,10);
+        if(filter === 'incomplete') goals = goals.filter(g => !g.completed);
+        else if(filter === 'completed') goals = goals.filter(g => g.completed);
+        else if(filter === 'dueToday') goals = goals.filter(g => g.due === todayIso);
+        else if(filter === 'overdue') goals = goals.filter(g => g.due && g.due < todayIso && !g.completed);
+        else if(filter === 'recurring') goals = goals.filter(g => g.recurrence && g.recurrence !== 'none');
+        else if(filter === 'noRecurrence') goals = goals.filter(g => !g.recurrence || g.recurrence === 'none');
+
+        goalsGridEl.innerHTML = '';
+        if(goals.length === 0){
+          emptyStateEl.style.display = 'block';
+        } else {
+          emptyStateEl.style.display = 'none';
+        }
+
+        goals.sort((a,b)=> (a.completed - b.completed) || (b.createdAt - a.createdAt));
+
+        goals.forEach(g=>{
+          const card = document.createElement('div');
+          card.className = 'goal-card' + (STATE.compact ? ' compact' : '');
+          card.draggable = true;
+          card.dataset.id = g.id;
+          const completedPct = computeSubtasksPercent(g);
+          card.innerHTML = `
+            <div class="goal-row">
+              <div>
+                <div class="goal-title">${escapeHtml(g.title)}</div>
+                <div class="muted" style="font-size:12px">${g.folderName} • ${g.due ? 'due '+g.due : ''} ${g.recurrence && g.recurrence!=='none' ? '• ' + capitalize(g.recurrence) : ''}</div>
+              </div>
+              <div style="display:flex; gap:6px; align-items:center">
+                <div class="badge">Pom: ${g.pomodoros || 0}</div>
+                <button class="btn" data-action="toggle-complete" title="${g.completed ? 'Mark uncomplete' : 'Complete'}"><i class="${g.completed ? 'fa-solid fa-check' : 'fa-regular fa-circle'}"></i></button>
+                <button class="btn" data-action="edit" title="Edit"><i class="fa-solid fa-pen"></i></button>
+                <button class="btn" data-action="delete" title="Delete"><i class="fa-solid fa-trash"></i></button>
+              </div>
+            </div>
+
+            <div style="display:flex; gap:8px; align-items:center; justify-content:space-between; margin-top:6px">
+              <div class="progress"><i style="width:${g.completed?100:completedPct}%"></i></div>
+              <div class="muted" style="font-size:12px">${g.completed ? 'Completed' : timeSince(g.createdAt)}</div>
+            </div>
+
+            <div class="muted" style="margin-top:6px; font-size:13px">${escapeHtml(g.notes || '')}</div>
+
+            <div class="subtasks" style="margin-top:8px">
+              ${g.subtasks.slice(0,4).map(s => `
+                <label class="subtask-item" data-subtask-id="${s.id}">
+                  <input type="checkbox" ${s.checked ? 'checked' : ''}/>
+                  <div style="flex:1">${escapeHtml(s.text)}</div>
+                </label>`).join('')}
+              ${g.subtasks.length > 4 ? `<div class="muted small">+ ${g.subtasks.length - 4} more subtasks</div>` : ''}
+            </div>
+          `;
+
+          card.querySelector('[data-action="toggle-complete"]').addEventListener('click', ()=> toggleComplete(g.folderId, g.id));
+          card.querySelector('[data-action="edit"]').addEventListener('click', ()=> openGoalModalForEdit(g));
+          card.querySelector('[data-action="delete"]').addEventListener('click', ()=> { if(confirm('Delete this goal?')) deleteGoal(g.folderId, g.id); });
+
+          card.querySelectorAll('.subtask-item').forEach(lbl=>{
+            const chk = lbl.querySelector('input[type="checkbox"]');
+            const sid = lbl.dataset.subtaskId;
+            chk.addEventListener('change', (ev)=> toggleSubtask(g.folderId, g.id, sid, chk.checked));
+          });
+
+          card.addEventListener('dragstart', (ev)=>{ card.classList.add('dragging'); ev.dataTransfer.setData('text/plain', JSON.stringify({id:g.id, folderId:g.folderId})); });
+          card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
+
+          goalsGridEl.appendChild(card);
+        });
+      }
+
+      function computeSubtasksPercent(goal){
+        if(!goal.subtasks || goal.subtasks.length===0) return goal.completed ? 100 : 0;
+        const done = goal.subtasks.filter(s=>s.checked).length;
+        return Math.round(done/goal.subtasks.length*100);
+      }
+      function capitalize(s){ return s ? s[0].toUpperCase()+s.slice(1) : s; }
+      function timeSince(ts){
+        const d = Math.floor((Date.now()-ts)/1000);
+        if(d < 60) return `${d}s ago`;
+        if(d < 3600) return `${Math.floor(d/60)}m ago`;
+        if(d < 86400) return `${Math.floor(d/3600)}h ago`;
+        return `${Math.floor(d/86400)}d ago`;
+      }
+      function escapeHtml(s){ return String(s||'').replace(/[&<>"]/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c])); }
+
+      function renderStats(){
+        const allGoals = STATE.folders.flatMap(f=> f.goals );
+        const total = allGoals.length;
+        const done = allGoals.filter(g=>g.completed).length;
+        const recurring = allGoals.filter(g=>g.recurrence && g.recurrence!=='none').length;
+        totalGoalsEl.textContent = `Goals: ${total}`;
+        completedGoalsEl.textContent = `Done: ${done}`;
+        recurringCountEl.textContent = `Recurring: ${recurring}`;
+        selectedFolderNameEl.textContent = (STATE.folders.find(f=>f.id===STATE.selectedFolderId)?.name) || 'All';
+        const selFolder = STATE.folders.find(f=>f.id===STATE.selectedFolderId);
+        folderProgressEl.textContent = selFolder ? computeFolderProgress(selFolder)+'%' : '—';
+      }
+
+      // --- Folder modal ---
+      let editingFolder = null;
+      $('#addFolderBtn').addEventListener('click', ()=> openFolderModal());
+      $('#cancelFolder').addEventListener('click', ()=> closeFolderModal());
+      $('#saveFolder').addEventListener('click', ()=>{
+        const name = folderNameInput.value.trim() || 'Untitled';
+        const color = folderColorInput.value || '#00f0ff';
+        if(editingFolder){ editingFolder.name = name; editingFolder.color = color; }
+        else { STATE.folders.push({id:id(), name, color, goals:[]}); STATE.selectedFolderId = STATE.folders[STATE.folders.length-1].id; }
+        editingFolder = null; closeFolderModal(); save();
+      });
+      function openFolderModal(folder){ editingFolder = folder || null; folderModal.classList.add('show'); folderNameInput.value = folder ? folder.name : ''; folderColorInput.value = folder ? folder.color : '#00f0ff'; }
+      function closeFolderModal(){ folderModal.classList.remove('show'); editingFolder=null; }
+
+      // --- Goal modal ---
+      let editingGoalContext = null;
+      $('#quickGoalBtn').addEventListener('click', ()=> openGoalModal());
+      $('#cancelGoal').addEventListener('click', ()=> closeGoalModal());
+      $('#saveGoal').addEventListener('click', ()=>{
+        const title = goalTitle.value.trim() || 'Untitled goal';
+        const notes = goalNotes.value.trim();
+        const due = goalDue.value || null;
+        const recurrence = goalRecurrence.value || 'none';
+        const folderId = goalFolderSelect.value || (STATE.selectedFolderId || STATE.folders[0]?.id);
+        if(!folderId) return alert('Create a folder first.');
+        const folder = STATE.folders.find(f=>f.id===folderId);
+        if(editingGoalContext){
+          const g = folder.goals.find(x=>x.id===editingGoalContext.goalId) || (function(){ for(const f of STATE.folders){ const gg = f.goals.find(x=>x.id===editingGoalContext.goalId); if(gg) return gg; } return null; })();
+          if(g){ g.title = title; g.notes = notes; g.due = due; g.recurrence = recurrence; }
+        } else {
+          const tempSubs = [];
+          subtasksList.querySelectorAll('.subtask-item').forEach(node=>{
+            const txtInput = node.querySelector('input[type="text"]');
+            const chk = node.querySelector('input[type="checkbox"]');
+            if(txtInput && txtInput.value.trim()) tempSubs.push({ id:id(), text: txtInput.value.trim(), checked: !!chk.checked });
+          });
+          const newGoal = { id:id(), title, notes, due, completed:false, createdAt:Date.now(), subtasks: tempSubs, recurrence:recurrence, pomodoros:0 };
+          folder.goals.unshift(newGoal);
+        }
+        editingGoalContext = null; closeGoalModal(); save();
+      });
+
+      function renderFolderSelect(){
+        goalFolderSelect.innerHTML = '';
+        STATE.folders.forEach(f=>{ const opt = document.createElement('option'); opt.value = f.id; opt.textContent = f.name; if(f.id===STATE.selectedFolderId) opt.selected = true; goalFolderSelect.appendChild(opt); });
+      }
+
+      function openGoalModal(folderId=null, goalId=null, prefill){
+        renderFolderSelect(); editingGoalContext = null; subtasksList.innerHTML = '';
+        if(goalId){
+          let goal = null; let fId = folderId;
+          for(const f of STATE.folders){ const gg = f.goals.find(x=>x.id===goalId); if(gg){ goal = gg; fId = f.id; break; } }
+          if(goal){ editingGoalContext = { folderId: fId, goalId: goal.id }; goalTitle.value = goal.title; goalNotes.value = goal.notes || ''; goalDue.value = goal.due || ''; goalRecurrence.value = goal.recurrence || 'none'; goalFolderSelect.value = fId; renderSubtasksList(goal); }
+          else { editingGoalContext = null; goalTitle.value=''; goalNotes.value=''; goalDue.value=''; goalRecurrence.value='none'; goalFolderSelect.value = STATE.selectedFolderId || STATE.folders[0]?.id || ''; }
+        } else {
+          editingGoalContext = null;
+          if(prefill){
+            goalTitle.value = prefill.title || ''; goalNotes.value = prefill.notes || ''; goalRecurrence.value = prefill.recurrence || 'none';
+            subtasksList.innerHTML = '';
+            (prefill.subtasks || []).forEach(s => { const node = createSubtaskNode({id:id(), text:s, checked:false}, true); subtasksList.appendChild(node); });
+            goalFolderSelect.value = prefill.folderId || STATE.selectedFolderId || STATE.folders[0]?.id || '';
+          } else {
+            goalTitle.value=''; goalNotes.value=''; goalDue.value=''; goalRecurrence.value='none'; subtasksList.innerHTML = ''; goalFolderSelect.value = folderId || STATE.selectedFolderId || STATE.folders[0]?.id || '';
+          }
+        }
+        goalModal.classList.add('show'); setTimeout(()=> newSubtaskInput.focus(), 120);
+      }
+      function closeGoalModal(){ goalModal.classList.remove('show'); editingGoalContext = null; subtasksList.innerHTML = ''; }
+
+      // Subtasks inside modal
+      addSubtaskBtn.addEventListener('click', addSubtaskFromModal);
+      newSubtaskInput.addEventListener('keydown', (e) => { if(e.key === 'Enter'){ e.preventDefault(); addSubtaskFromModal(); } });
+      function addSubtaskFromModal(){
+        const txt = newSubtaskInput.value.trim(); if(!txt) return;
+        if(editingGoalContext){
+          const ctx = editingGoalContext; const folder = STATE.folders.find(f=>f.id===ctx.folderId); const g = folder && folder.goals.find(x=>x.id===ctx.goalId);
+          if(g){ g.subtasks.push({id:id(), text:txt, checked:false}); renderSubtasksList(g); newSubtaskInput.value = ''; save(); return; }
+        }
+        const tmpId = id(); const node = createSubtaskNode({id:tmpId, text:txt, checked:false}, true); subtasksList.appendChild(node); newSubtaskInput.value = ''; setTimeout(()=> newSubtaskInput.focus(), 20);
+      }
+
+      function renderSubtasksList(goal){
+        subtasksList.innerHTML = '';
+        goal.subtasks.forEach(s=>{ const node = createSubtaskNode(s, false, goal); subtasksList.appendChild(node); });
+      }
+
+      function createSubtaskNode(s, isTemp, goalRef){
+        const wr = document.createElement('div'); wr.className = 'subtask-item'; wr.dataset.subtaskId = s.id;
+        wr.innerHTML = `
+          <input type="checkbox" ${s.checked ? 'checked' : ''} style="width:18px;height:18px" />
+          <input type="text" value="${escapeHtml(s.text)}" style="flex:1; background:var(--input-bg); border:1px solid var(--glass-border); padding:6px; border-radius:8px; color:var(--text)" />
+          <button class="btn" title="Delete"><i class="fa-solid fa-trash"></i></button>
+        `;
+        const chk = wr.querySelector('input[type="checkbox"]'); const txt = wr.querySelector('input[type="text"]'); const del = wr.querySelector('button');
+        chk.addEventListener('change', ()=> {
+          if(isTemp) s.checked = chk.checked;
+          else { const g = goalRef; const st = g.subtasks.find(x=>x.id===s.id); if(st) st.checked = chk.checked; if(g.subtasks.length && g.subtasks.every(x=>x.checked)){ g.completed = true; handleRecurringOnComplete(goalRef ? goalRef.folderId : null, g); } save(); }
+        });
+        txt.addEventListener('input', ()=> { if(isTemp) s.text = txt.value; else { const g = goalRef; const st = g.subtasks.find(x=>x.id===s.id); if(st) st.text = txt.value; save(); } });
+        del.addEventListener('click', ()=> { if(isTemp) wr.remove(); else { if(!confirm('Delete subtask?')) return; const g = goalRef; const idx = g.subtasks.findIndex(x=>x.id===s.id); if(idx>=0) g.subtasks.splice(idx,1); renderSubtasksList(g); save(); } });
+        return wr;
+      }
+
+      // card subtask toggle
+      function toggleSubtask(folderId, goalId, subtaskId, checked){
+        const folder = STATE.folders.find(f=>f.id===folderId); if(!folder) return;
+        const g = folder.goals.find(x=>x.id===goalId); if(!g) return;
+        const s = g.subtasks.find(x=>x.id===subtaskId); if(!s) return;
+        s.checked = !!checked;
+        if(g.subtasks.length && g.subtasks.every(x=>x.checked)){ g.completed = true; handleRecurringOnComplete(folderId, g); }
+        save();
+      }
+
+      function toggleComplete(folderId, goalId){
+        const folder = STATE.folders.find(f=>f.id===folderId); if(!folder) return;
+        const g = folder.goals.find(x=>x.id===goalId); if(!g) return;
+        g.completed = !g.completed; if(g.completed) handleRecurringOnComplete(folderId, g); save();
+      }
+
+      function handleRecurringOnComplete(folderId, goal){
+        if(!goal.recurrence || goal.recurrence === 'none') return;
+        const nextDue = computeNextDue(goal.due, goal.recurrence);
+        const newGoal = { id: id(), title: goal.title, notes: goal.notes, due: nextDue, completed: false, createdAt: Date.now(), subtasks: (goal.subtasks || []).map(s=>({ id:id(), text:s.text, checked:false })), recurrence: goal.recurrence || 'none', pomodoros: 0 };
+        const folder = STATE.folders.find(f=>f.id===folderId); if(folder) folder.goals.unshift(newGoal);
+      }
+
+      function computeNextDue(dueStr, recurrence){ let base = dueStr ? new Date(dueStr) : new Date(); if(!dueStr) base.setHours(0,0,0,0); if(recurrence === 'daily') base.setDate(base.getDate() + 1); else if(recurrence === 'weekly') base.setDate(base.getDate() + 7); else if(recurrence === 'monthly') base.setMonth(base.getMonth() + 1); const y = base.getFullYear(), m = String(base.getMonth()+1).padStart(2,'0'), d = String(base.getDate()).padStart(2,'0'); return `${y}-${m}-${d}`; }
+
+      function deleteGoal(folderId, goalId){ const folder = STATE.folders.find(f=>f.id===folderId); if(!folder) return; const idx = folder.goals.findIndex(g=>g.id===goalId); if(idx>=0) folder.goals.splice(idx,1); save(); }
+
+      function openGoalModalForEdit(g){ openGoalModal(g.folderId, g.id); }
+
+      // drag & drop reorder
+      goalsGridEl.addEventListener('dragover', (ev)=> ev.preventDefault());
+      goalsGridEl.addEventListener('drop', (ev)=>{ ev.preventDefault(); try{ const payload = JSON.parse(ev.dataTransfer.getData('text/plain')); const folder = STATE.folders.find(f=>f.id===payload.folderId); if(folder){ const idx = folder.goals.findIndex(g=>g.id===payload.id); if(idx>=0){ const [g] = folder.goals.splice(idx,1); folder.goals.unshift(g); save(); } } }catch(e){} });
+
+      function ensureAtLeastOneFolder(){ if(STATE.folders.length===0) STATE.folders.push({id:id(), name:'Inbox', color:'#7b61ff', goals:[]}); }
+
+      // --- Pomodoro ---
+      function renderGoalSelectForPomodoro(){
+        pomGoalSelect.innerHTML = '<option value="">— No goal —</option>';
+        const allGoals = STATE.folders.flatMap(f => f.goals.map(g => ({...g, folderName:f.name, folderId:f.id})));
+        allGoals.forEach(g => { const opt = document.createElement('option'); opt.value = g.id; opt.textContent = `${g.title} [${g.folderName}]`; pomGoalSelect.appendChild(opt); });
+        if(STATE.pom && STATE.pom.attachedGoalId) pomGoalSelect.value = STATE.pom.attachedGoalId;
+      }
+
+      function updatePomDisplay(){ const secs = STATE.pom.remaining; const m = String(Math.floor(secs/60)).padStart(2,'0'); const s = String(secs % 60).padStart(2,'0'); pomTimeEl.textContent = `${m}:${s}`; pomStatus.textContent = STATE.pom.running ? 'Running' : 'Idle'; }
+
+      function updatePomButtonStyles(){ if(STATE.pom.running){ pomStartBtn.classList.remove('primary'); pomPauseBtn.classList.add('primary'); } else { pomStartBtn.classList.add('primary'); pomPauseBtn.classList.remove('primary'); } }
+
+      pomStartBtn.addEventListener('click', ()=>{
+        const duration = Number(pomDurationSel.value) || 1500;
+        if(!STATE.pom.running){
+          if(STATE.pom.remaining === 0 || STATE.pom.duration !== duration) { STATE.pom.remaining = duration; STATE.pom.duration = duration; }
+          STATE.pom.attachedGoalId = pomGoalSelect.value || null; STATE.pom.running = true;
+          STATE.pom.intervalId = setInterval(()=> {
+            STATE.pom.remaining = Math.max(0, STATE.pom.remaining - 1); updatePomDisplay();
+            if(STATE.pom.remaining <= 0){
+              clearInterval(STATE.pom.intervalId); STATE.pom.running = false; STATE.pom.intervalId = null; updatePomDisplay();
+              if(STATE.pom.attachedGoalId){
+                const found = findGoalById(STATE.pom.attachedGoalId);
+                if(found && found.goal) found.goal.pomodoros = (found.goal.pomodoros || 0) + 1;
+              }
+              save();
+              try{ if(typeof Notification !== 'undefined' && Notification.permission === 'granted'){ new Notification('Pomodoro complete!'); } }catch(e){}
+              alert('Pomodoro complete!');
+              updatePomButtonStyles();
+            }
+          }, 1000);
+        }
+        updatePomDisplay(); updatePomButtonStyles();
+      });
+
+      pomPauseBtn.addEventListener('click', ()=>{
+        if(STATE.pom.running && STATE.pom.intervalId){ clearInterval(STATE.pom.intervalId); STATE.pom.running = false; STATE.pom.intervalId = null; updatePomDisplay(); save(); }
+        updatePomButtonStyles();
+      });
+
+      pomResetBtn.addEventListener('click', ()=>{
+        if(STATE.pom.intervalId) clearInterval(STATE.pom.intervalId);
+        STATE.pom.running = false; STATE.pom.intervalId = null;
+        const duration = Number(pomDurationSel.value) || 1500; STATE.pom.remaining = duration; STATE.pom.duration = duration; STATE.pom.attachedGoalId = pomGoalSelect.value || null;
+        updatePomDisplay(); save(); updatePomButtonStyles();
+      });
+
+      pomGoalSelect.addEventListener('change', ()=>{ STATE.pom.attachedGoalId = pomGoalSelect.value || null; updatePomDisplay(); save(); });
+      pomDurationSel.addEventListener('change', ()=>{ const d = Number(pomDurationSel.value) || 1500; STATE.pom.duration = d; STATE.pom.remaining = d; updatePomDisplay(); });
+
+      function findGoalById(goalId){ for(const f of STATE.folders){ const g = f.goals.find(x=>x.id===goalId); if(g) return { folder: f, goal: g }; } return null; }
+
+      // --- Theme toggle ---
+      $('#themeToggle').addEventListener('click', ()=>{ STATE.theme = (STATE.theme === 'light') ? 'dark' : 'light'; save(); });
+
+      // compact toggle
+      $('#compactToggle').addEventListener('click', ()=>{ STATE.compact = !STATE.compact; document.querySelector('#app').classList.toggle('compact', STATE.compact); save(); });
+
+      // search & filter bindings
+      searchInput.addEventListener('input', ()=> renderGoals());
+      filterSelect.addEventListener('change', ()=> renderGoals());
+
+      // close modals on outside click
+      window.addEventListener('click', (e)=>{ if(e.target === folderModal) closeFolderModal(); if(e.target === goalModal) closeGoalModal(); if(e.target === ideaModal) closeIdeaModal(); });
+
+      // init
+      load();
+      ensureAtLeastOneFolder();
+      STATE.pom.remaining = STATE.pom.remaining || 1500;
+      STATE.pom.duration = STATE.pom.duration || 1500;
+      applyThemeFromState();
+      renderAll();
+      updatePomDisplay();
+
+      // cleanup legacy gamification
+      function cleanupLegacy(){ if(STATE.points) delete STATE.points; if(STATE.streak) delete STATE.streak; if(STATE.lastCompleteDate) delete STATE.lastCompleteDate; }
+      cleanupLegacy();
+
+      window.NeonGoals = { STATE, save, id, findGoalById };
+
+      // ---------------------
+      // Random Idea Feature (30+ templates) - same as before
+      // ---------------------
+      const ideaBtn = $('#ideaBtn');
+      const ideaTemplates = [
+        {cat:'Health', t:'Walk 30 minutes', notes:'Easy walk — keep it chill.', subs:['Put on shoes','Pick a route','Walk for 30 minutes']},
+        {cat:'Learning', t:'Study a single topic for 25 minutes', notes:'Focus session — no distractions.', subs:['Pick topic','Set timer 25m','Take 5 minutes notes']},
+        {cat:'Habit', t:'Meditate 10 minutes', notes:'Breathing + awareness.', subs:['Find a quiet spot','Set 10m timer','Focus on breath']},
+        {cat:'Fitness', t:'Bodyweight circuit (15 min)', notes:'Quick full body.', subs:['Warm up 2 min','3 rounds of circuit','Cool down stretch']},
+        {cat:'Creative', t:'Write 300 words', notes:'Free-write anything.', subs:['Open doc','Write 300 words','Save & reflect']},
+        {cat:'Skill', t:'Practice instrument 20 min', notes:'Short practice with focus.', subs:['Warm up scales','Practice piece','Record one take']},
+        {cat:'Social', t:'Message a friend to catch up', notes:'A short, positive check-in.', subs:['Pick friend','Write message','Send & set follow-up']},
+        {cat:'Productivity', t:'Clear 5 small tasks', notes:'Quick wins to reduce backlog.', subs:['Pick 5 tasks','Do each max 10m','Tick off']},
+        {cat:'Wellness', t:'Prep a healthy meal', notes:'Batch cooking helps later.', subs:['Choose recipe','Shop ingredients','Cook and store']},
+        {cat:'Mindset', t:'Write a 5-minute gratitude list', notes:'Small wins, big impact.', subs:['Grab paper','Write 5 things','Close and breathe']},
+        {cat:'Learning', t:'Watch a short tutorial (15 min)', notes:'Choose a focused vid.', subs:['Pick topic','Watch 15m','Try one step']},
+        {cat:'Fitness', t:'Do a 20-min yoga flow', notes:'Mobility and chill.', subs:['Roll mat','Follow flow','Savasana 2 min']},
+        {cat:'Creative', t:'Sketch for 15 minutes', notes:'No pressure, just lines.', subs:['Grab paper','Sketch 15 min','Pick favorite']},
+        {cat:'Health', t:'Drink 1 extra litre of water', notes:'Hydration boost.', subs:['Fill bottle','Sip through the day','Finish by evening']},
+        {cat:'Finance', t:'Review subscriptions (15 min)', notes:'Trim the fat.', subs:['Open bank','List subs','Cancel unused']},
+        {cat:'Career', t:'Update resume/contact 30 min', notes:'Small refresh.', subs:['Open resume','Update one section','Save & export']},
+        {cat:'Social', t:'Plan a short meetup', notes:'Coffee or walk.', subs:['Pick a person','Suggest time','Confirm plan']},
+        {cat:'Home', t:'Declutter a drawer', notes:'Micro-tidy.', subs:['Pick drawer','Take out everything','Return essentials only']},
+        {cat:'Skill', t:'Do spaced-repetition review (20 min)', notes:'Anki-style.', subs:['Open app','Review 20 min','Mark tough ones']},
+        {cat:'Creative', t:'Take 20 photos of texture/patterns', notes:'Practice eye for detail.', subs:['Walk around','Shoot 20 photos','Pick 3 favorites']},
+        {cat:'Learning', t:'Read one article and summarize', notes:'Improve retention.', subs:['Choose article','Read fully','Write short summary']},
+        {cat:'Wellness', t:'Take a tech-free hour', notes:'No screens.', subs:['Pick an hour','Put phone away','Do offline stuff']},
+        {cat:'Productivity', t:'Plan tomorrow in 10 minutes', notes:'Light planning.', subs:['List top 3','Estimate time','Set alarms']},
+        {cat:'Fitness', t:'Intervals: 10 x 30s effort', notes:'Short high-intensity.', subs:['Warm up','Do 10 intervals','Cool down']},
+        {cat:'Creative', t:'Start a tiny side project (brainstorm 30m)', notes:'Seed an idea.', subs:['Write ideas','Pick one','Outline first step']},
+        {cat:'Health', t:'Stretch for 10 minutes', notes:'Neck and shoulders.', subs:['Neck rolls','Shoulder stretches','Hamstring stretch']},
+        {cat:'Social', t:'Write a thank-you note', notes:'Short and meaningful.', subs:['Pick person','Write 3 lines','Send']},
+        {cat:'Finance', t:'Set a small savings goal', notes:'Round-up savings.', subs:['Pick amount','Create folder','Automate if possible']},
+        {cat:'Learning', t:'Translate 10 sentences to practice language', notes:'Active recall.', subs:['Pick source','Translate 10','Check answers']},
+        {cat:'Home', t:'Plan one improvement for your space', notes:'Small upgrade.', subs:['Identify area','Pick solution','Schedule time']},
+        {cat:'Wellness', t:'Sleep hygiene ritual (20 min)', notes:'Wind down.', subs:['Dim lights','Prep bed','Read 10 min']}
+      ];
+
+      function pickRandomIdea(){
+        const base = ideaTemplates[Math.floor(Math.random()*ideaTemplates.length)];
+        const variants = [
+          base.t,
+          base.t + ' (mini)',
+          base.t.replace(/\d+/, (n)=> Math.max(5, Math.round(n * (0.8 + Math.random()*0.6))))
+        ];
+        const title = variants[Math.floor(Math.random()*variants.length)];
+        const subs = (base.subs || []).slice(0,4);
+        return { title, notes: base.notes, subtasks: subs, recurrence:'none' };
+      }
+
+      function openIdeaModal(){
+        const idea = pickRandomIdea();
+        ideaModal.dataset.current = JSON.stringify(idea);
+        ideaTitleEl.textContent = idea.title;
+        ideaNotesEl.textContent = idea.notes || '';
+        ideaSubtasksEl.innerHTML = (idea.subtasks||[]).map(s => `• ${escapeHtml(s)}`).join('<br/>');
+        ideaModal.classList.add('show');
+      }
+      function closeIdeaModal(){ ideaModal.classList.remove('show'); ideaModal.dataset.current = ''; }
+
+      ideaBtn.addEventListener('click', openIdeaModal);
+      ideaCloseBtn.addEventListener('click', () => closeIdeaModal());
+
+      ideaOpenBtn.addEventListener('click', ()=>{
+        try{
+          const idea = JSON.parse(ideaModal.dataset.current || '{}');
+          closeIdeaModal();
+          openGoalModal(null, null, idea);
+        } catch(e){ closeIdeaModal(); }
+      });
+
+      ideaCreateBtn.addEventListener('click', ()=>{
+        try{
+          const idea = JSON.parse(ideaModal.dataset.current || '{}');
+          const folderId = STATE.selectedFolderId || STATE.folders[0]?.id;
+          const folder = STATE.folders.find(f=>f.id===folderId);
+          if(!folder){ alert('No folder to add to'); return; }
+          const newGoal = { id: id(), title: idea.title || 'New Goal', notes: idea.notes || '', due: null, completed: false, createdAt: Date.now(), subtasks: (idea.subtasks || []).map(t => ({ id: id(), text: t, checked: false })), recurrence: idea.recurrence || 'none', pomodoros: 0 };
+          folder.goals.unshift(newGoal); save(); closeIdeaModal();
+        } catch(e){ closeIdeaModal(); }
+      });
+
+      // ---------------------
+      // Export / Import (backup + restore)
+      // ---------------------
+      exportBtn.addEventListener('click', ()=>{
+        try{
+          const data = localStorage.getItem(LS_KEY) || JSON.stringify({folders:[], selectedFolderId:null});
+          const blob = new Blob([data], {type: 'application/json'});
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          const now = new Date().toISOString().replace(/[:.]/g,'-');
+          a.href = url;
+          a.download = `neon-goals-backup-${now}.json`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+        }catch(e){
+          alert('Export failed: '+(e.message||e));
+        }
+      });
+
+      importBtn.addEventListener('click', ()=> importFile.click());
+
+      importFile.addEventListener('change', (ev)=>{
+        const f = ev.target.files && ev.target.files[0];
+        if(!f) return;
+        const reader = new FileReader();
+        reader.onload = function(e){
+          try{
+            const parsed = JSON.parse(e.target.result);
+            // very lightweight validation
+            if(!parsed || !Array.isArray(parsed.folders)){
+              alert('Invalid backup file (missing folders array).');
+              importFile.value = '';
+              return;
+            }
+            if(!confirm('Importing will replace your current data. Continue?')) { importFile.value = ''; return; }
+            // write to localStorage and reload state
+            localStorage.setItem(LS_KEY, JSON.stringify(parsed));
+            alert('Import successful. Reloading app state.');
+            // reload into app without refresh by re-loading and rendering
+            load();
+            renderAll();
+          }catch(err){
+            alert('Could not parse file: '+(err.message||err));
+          } finally {
+            importFile.value = '';
+          }
+        };
+        reader.readAsText(f);
+      });
+
+    })();
+  </script>
+</body>
+</html>
